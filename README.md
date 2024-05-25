@@ -29,6 +29,13 @@ Before you can run this script, you will need to:
 
 ## Usage
 
+Before running the script, you need to install the necessary Python libraries. You can do this by running the following command in your terminal:
+
+```
+pip install -r requirements.txt
+```
+
+
 To use this script, follow these steps:
 
 1. Set the `playlist_id` variable to the ID of the YouTube playlist you want to download videos from.
