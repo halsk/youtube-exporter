@@ -1,4 +1,6 @@
 /.DS_Store
 /credentials.json
-/downloads
+/download_dir
+/download_dir/**
 /path_to_downloaded_video.mp4
+.DS_Store

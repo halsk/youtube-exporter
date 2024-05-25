@@ -118,7 +118,7 @@ def main():
 
     # Define playlist ID and subtitle details
     playlist_id = "PLbpC3u41peksrSXFqMpTexRIQcS_syzsL"
-    output_path = "downloads"
+    download_dir = "download_dir"
     category_id = "28"  # Technology category
 
     # Language and subtitle details
@@ -128,6 +128,10 @@ def main():
         # Add more subtitle details here if needed
     ]
 
+    # Ensure download directory exists
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
     # Retrieve video URLs from playlist
     video_urls = get_video_urls_from_playlist(original_youtube, playlist_id)
 
@@ -135,15 +139,18 @@ def main():
         # Scrape metadata
         title, description, tags = scrape_video_metadata(video_url)
 
+        # Create a unique output path for the video
+        video_id = video_url.split("v=")[1]
+        output_path = os.path.join(download_dir, f"{video_id}.mp4")
+
         # Download video
-        print(f"Downloading video: {title}")
-        download_video(video_url, output_path)
-        print(f"Video downloaded: {title}")
+        print(f"Downloading video from {video_url} to {output_path}")
+        download_video(video_url, download_dir)
 
         # Upload video to target channel
         video_response = upload_video(target_youtube, output_path, title, description, category_id, tags)
-        video_id = video_response['id']
-        print(f"Video uploaded with ID: {video_id}")
+        uploaded_video_id = video_response['id']
+        print(f"Video uploaded with ID: {uploaded_video_id}")
 
         # Upload multiple subtitles
         for subtitle_info in subtitles_info:
@@ -153,7 +160,7 @@ def main():
             
             # Check if the subtitle file exists
             if os.path.exists(subtitle_file):
-                subtitle_response = upload_subtitle(target_youtube, video_id, subtitle_file, language, subtitle_name)
+                subtitle_response = upload_subtitle(target_youtube, uploaded_video_id, subtitle_file, language, subtitle_name)
                 print(f"Subtitles uploaded with ID: {subtitle_response['id']}")
             else:
                 print(f"Subtitle file {subtitle_file} not found. Skipping upload for {subtitle_name}.")
