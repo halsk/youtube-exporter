@@ -51,7 +51,7 @@ def scrape_video_metadata(video_url):
 
     return title, description, tags
 
-def download_video(video_url, output_path, retries=3, delay=5):
+def download_video(video_url, output_path, retries=5, delay=10):
     for attempt in range(retries):
         try:
             yt = YouTube(video_url)
@@ -121,6 +121,16 @@ def download_srt(youtube, caption_id, output_file):
         download = request.execute()
         file.write(download)
 
+def read_uploaded_videos(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            return set(file.read().splitlines())
+    return set()
+
+def write_uploaded_video(file_path, video_id):
+    with open(file_path, 'a') as file:
+        file.write(f"{video_id}\n")
+
 def main():
     # Authenticate YouTube API for the original channel to download videos
     original_channel_client_secrets_file = "credentials.json"
@@ -133,6 +143,7 @@ def main():
     # Define playlist ID and subtitle details
     playlist_id = "PLbpC3u41peksrSXFqMpTexRIQcS_syzsL"
     download_dir = "download_dir"
+    uploaded_videos_file = "uploaded_videos.txt"
     category_id = "28"  # Technology category
 
     # Language and subtitle details
@@ -148,6 +159,9 @@ def main():
 
     # Retrieve video URLs from playlist
     video_urls = get_video_urls_from_playlist(original_youtube, playlist_id)
+
+    # Read uploaded videos record
+    uploaded_videos = read_uploaded_videos(uploaded_videos_file)
 
     for video_url in video_urls:
         # Scrape metadata
@@ -165,10 +179,18 @@ def main():
             print(f"Downloading video from {video_url} to {output_path}")
             download_video(video_url, output_path)
 
+        # Check if the video is already uploaded
+        if video_id in uploaded_videos:
+            print(f"Video {video_id} already uploaded. Skipping upload.")
+            continue
+
         # Upload video to target channel
         video_response = upload_video(target_youtube, output_path, title, description, category_id, tags)
         uploaded_video_id = video_response['id']
         print(f"Video uploaded with ID: {uploaded_video_id}")
+
+        # Record uploaded video ID
+        write_uploaded_video(uploaded_videos_file, video_id)
 
         # Upload multiple subtitles
         for subtitle_info in subtitles_info:
