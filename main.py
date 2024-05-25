@@ -3,8 +3,10 @@ import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import googleapiclient.errors
 from pytube import YouTube
+from pytube.exceptions import VideoUnavailable
 import requests
 from bs4 import BeautifulSoup
+import time
 
 def authenticate_youtube(client_secrets_file):
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
@@ -49,10 +51,22 @@ def scrape_video_metadata(video_url):
 
     return title, description, tags
 
-def download_video(video_url, output_path):
-    yt = YouTube(video_url)
-    stream = yt.streams.get_highest_resolution()
-    stream.download(output_path=output_path)
+def download_video(video_url, output_path, retries=3, delay=5):
+    for attempt in range(retries):
+        try:
+            yt = YouTube(video_url)
+            stream = yt.streams.get_highest_resolution()
+            stream.download(output_path=os.path.dirname(output_path), filename=os.path.basename(output_path))
+            print(f"Downloaded video: {video_url} to {output_path}")
+            return
+        except (VideoUnavailable, TimeoutError) as e:
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            if attempt < retries - 1:
+                print(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"Failed to download video: {video_url} after {retries} attempts.")
+                raise
 
 def upload_video(youtube, file_path, title, description, category_id, tags):
     request = youtube.videos().insert(
@@ -124,7 +138,7 @@ def main():
     # Language and subtitle details
     subtitles_info = [
         {"path": "path_to_english_subtitle.srt", "language": "en", "name": "English Subtitles"},
-        {"path": "path_to_spanish_subtitle.srt", "language": "ja", "name": "Japanese Subtitles"}
+        {"path": "path_to_japanese_subtitle.srt", "language": "ja", "name": "Japanese Subtitles"}
         # Add more subtitle details here if needed
     ]
 
@@ -143,9 +157,13 @@ def main():
         video_id = video_url.split("v=")[1]
         output_path = os.path.join(download_dir, f"{video_id}.mp4")
 
-        # Download video
-        print(f"Downloading video from {video_url} to {output_path}")
-        download_video(video_url, download_dir)
+        # Skip download if the file already exists
+        if os.path.exists(output_path):
+            print(f"File {output_path} already exists. Skipping download.")
+        else:
+            # Download video with retry logic
+            print(f"Downloading video from {video_url} to {output_path}")
+            download_video(video_url, output_path)
 
         # Upload video to target channel
         video_response = upload_video(target_youtube, output_path, title, description, category_id, tags)
