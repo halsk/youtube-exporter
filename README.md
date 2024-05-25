@@ -1,169 +1,50 @@
-import os
-import google_auth_oauthlib.flow
-import googleapiclient.discovery
-import googleapiclient.errors
-from pytube import YouTube
-import requests
-from bs4 import BeautifulSoup
+# YouTube Video Downloader and Uploader
 
-def authenticate_youtube(client_secrets_file):
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    api_service_name = "youtube"
-    api_version = "v3"
-    scopes = ["https://www.googleapis.com/auth/youtube.upload",
-              "https://www.googleapis.com/auth/youtube.readonly"]
+This Python script is designed to automate the process of downloading videos from a YouTube playlist, scraping their metadata, and then uploading them to another YouTube channel with the option to include multiple subtitle tracks.
 
-    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-        client_secrets_file, scopes)
-    credentials = flow.run_local_server(port=0)
+## Features
 
-    youtube = googleapiclient.discovery.build(
-        api_service_name, api_version, credentials=credentials)
+- Authenticate with YouTube API
+- Download videos from a specified YouTube playlist
+- Scrape video metadata (title, description, tags)
+- Upload videos to a target YouTube channel
+- Upload multiple subtitle tracks for each video
 
-    return youtube
+## Prerequisites
 
-def get_video_urls_from_playlist(youtube, playlist_id):
-    request = youtube.playlistItems().list(
-        part="snippet",
-        playlistId=playlist_id,
-        maxResults=50
-    )
-    response = request.execute()
+Before you can run this script, you will need to:
 
-    video_urls = []
-    for item in response['items']:
-        video_id = item['snippet']['resourceId']['videoId']
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-        video_urls.append(video_url)
+1. Install Python 3.x on your system.
+2. Install the required Python libraries with `pip install -r requirements.txt`.
+3. Enable the YouTube Data API by following these steps:
+   - Go to the [Google API Console](https://console.developers.google.com/).
+   - Create a new project or select an existing one.
+   - In the dashboard, click on "ENABLE APIS AND SERVICES".
+   - Search for "YouTube Data API v3" and enable it.
+   - In the credentials section, click on "Create credentials" and choose "OAuth client ID".
+   - If prompted, configure the consent screen.
+   - Set the application type to "Desktop app" and give it a name.
+   - Once the credentials are created, download the JSON file and save it as `credentials.json` in the project directory.
+4. Obtain OAuth 2.0 client credentials from the Google API Console and save the file as `credentials.json` in the project directory.
 
-    return video_urls
+## Usage
 
-def scrape_video_metadata(video_url):
-    response = requests.get(video_url)
-    soup = BeautifulSoup(response.content, 'html.parser')
+To use this script, follow these steps:
 
-    title = soup.find('meta', {'name': 'title'})['content']
-    description = soup.find('meta', {'name': 'description'})['content']
-    keywords = soup.find('meta', {'name': 'keywords'})['content']
-    tags = keywords.split(',')
+1. Set the `playlist_id` variable to the ID of the YouTube playlist you want to download videos from.
+2. Set the `category_id` variable to the YouTube category ID for the uploaded videos.
+3. Define the subtitle information in the `subtitles_info` list if you want to upload subtitles.
+4. Run the script with `python main.py`.
 
-    return title, description, tags
+## Important Notes
 
-def download_video(video_url, output_path):
-    yt = YouTube(video_url)
-    stream = yt.streams.get_highest_resolution()
-    stream.download(output_path=output_path, filename=os.path.basename(output_path))
+- The `download_dir` directory is used to store the downloaded videos. Make sure you have enough space on your disk.
+- The `.gitignore` file is configured to ignore the `credentials.json` and `download_dir` to prevent uploading sensitive information to version control.
 
-def upload_video(youtube, file_path, title, description, category_id, tags):
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body={
-            "snippet": {
-                "title": title,
-                "description": description,
-                "tags": tags,
-                "categoryId": category_id
-            },
-            "status": {
-                "privacyStatus": "public"
-            }
-        },
-        media_body=file_path
-    )
-    response = request.execute()
-    return response
+## License
 
-def upload_subtitle(youtube, video_id, subtitle_file, language, name):
-    body = {
-        'snippet': {
-            'videoId': video_id,
-            'language': language,
-            'name': name,
-            'isDraft': False
-        }
-    }
-    insert_request = youtube.captions().insert(
-        part="snippet",
-        body=body,
-        media_body=subtitle_file
-    )
-    response = insert_request.execute()
-    return response
+This project is open-sourced under the MIT License. See the LICENSE file for more information.
 
-def get_caption_tracks(youtube, video_id):
-    request = youtube.captions().list(
-        part="snippet",
-        videoId=video_id
-    )
-    response = request.execute()
-    return response['items']
+## Disclaimer
 
-def download_srt(youtube, caption_id, output_file):
-    request = youtube.captions().download(
-        id=caption_id,
-        tfmt="srt"
-    )
-    with open(output_file, 'wb') as file:
-        download = request.execute()
-        file.write(download)
-
-def main():
-    # Authenticate YouTube API for the original channel to download videos
-    original_channel_client_secrets_file = "credentials.json"
-    original_youtube = authenticate_youtube(original_channel_client_secrets_file)
-
-    # Authenticate YouTube API for the target channel to upload videos
-    target_channel_client_secrets_file = "credentials.json"
-    target_youtube = authenticate_youtube(target_channel_client_secrets_file)
-
-    # Define playlist ID and subtitle details
-    playlist_id = "PLbpC3u41peksrSXFqMpTexRIQcS_syzsL"
-    download_dir = "download_dir"
-    category_id = "28"  # Technology category
-
-    # Language and subtitle details
-    subtitles_info = [
-        {"path": "path_to_english_subtitle.srt", "language": "en", "name": "English Subtitles"},
-        {"path": "path_to_japanese_subtitle.srt", "language": "ja", "name": "Japanese Subtitles"}
-        # Add more subtitle details here if needed
-    ]
-
-    # Ensure download directory exists
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
-
-    # Retrieve video URLs from playlist
-    video_urls = get_video_urls_from_playlist(original_youtube, playlist_id)
-
-    for video_url in video_urls:
-        # Scrape metadata
-        title, description, tags = scrape_video_metadata(video_url)
-
-        # Create a unique output path for the video
-        video_id = video_url.split("v=")[1]
-        output_path = os.path.join(download_dir, f"{video_id}.mp4")
-
-        # Download video
-        print(f"Downloading video from {video_url} to {output_path}")
-        download_video(video_url, download_dir)
-
-        # Upload video to target channel
-        video_response = upload_video(target_youtube, output_path, title, description, category_id, tags)
-        uploaded_video_id = video_response['id']
-        print(f"Video uploaded with ID: {uploaded_video_id}")
-
-        # Upload multiple subtitles
-        for subtitle_info in subtitles_info:
-            subtitle_file = subtitle_info["path"]
-            language = subtitle_info["language"]
-            subtitle_name = subtitle_info["name"]
-            
-            # Check if the subtitle file exists
-            if os.path.exists(subtitle_file):
-                subtitle_response = upload_subtitle(target_youtube, uploaded_video_id, subtitle_file, language, subtitle_name)
-                print(f"Subtitles uploaded with ID: {subtitle_response['id']}")
-            else:
-                print(f"Subtitle file {subtitle_file} not found. Skipping upload for {subtitle_name}.")
-
-if __name__ == "__main__":
-    main()
+This tool is for educational purposes only. Please ensure you have the right to download and upload the content from and to YouTube.
