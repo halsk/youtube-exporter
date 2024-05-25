@@ -2,11 +2,13 @@ import os
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import googleapiclient.errors
+from googleapiclient.http import MediaFileUpload
 from pytube import YouTube
 from pytube.exceptions import VideoUnavailable
 import requests
 from bs4 import BeautifulSoup
 import time
+from tqdm import tqdm
 
 def authenticate_youtube(client_secrets_file):
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
@@ -51,7 +53,7 @@ def scrape_video_metadata(video_url):
 
     return title, description, tags
 
-def download_video(video_url, output_path, retries=5, delay=10):
+def download_video(video_url, output_path, retries=3, delay=5):
     for attempt in range(retries):
         try:
             yt = YouTube(video_url)
@@ -69,6 +71,9 @@ def download_video(video_url, output_path, retries=5, delay=10):
                 raise
 
 def upload_video(youtube, file_path, title, description, category_id, tags):
+    file_size = os.path.getsize(file_path)
+    
+    media_body = MediaFileUpload(file_path, chunksize=-1, resumable=True)
     request = youtube.videos().insert(
         part="snippet,status",
         body={
@@ -82,9 +87,19 @@ def upload_video(youtube, file_path, title, description, category_id, tags):
                 "privacyStatus": "public"
             }
         },
-        media_body=file_path
+        media_body=media_body
     )
-    response = request.execute()
+    
+    progress_bar = tqdm(total=file_size, unit='B', unit_scale=True, desc="Uploading")
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            progress_bar.update(status.resumable_progress - progress_bar.n)
+    
+    progress_bar.close()
+    print(f"Uploaded video: {file_path}")
     return response
 
 def upload_subtitle(youtube, video_id, subtitle_file, language, name):
@@ -184,7 +199,7 @@ def main():
             print(f"Video {video_id} already uploaded. Skipping upload.")
             continue
 
-        # Upload video to target channel
+        # Upload video to target channel with resumable uploads and progress bar
         video_response = upload_video(target_youtube, output_path, title, description, category_id, tags)
         uploaded_video_id = video_response['id']
         print(f"Video uploaded with ID: {uploaded_video_id}")
